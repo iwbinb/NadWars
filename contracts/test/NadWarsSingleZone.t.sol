@@ -94,7 +94,7 @@ contract NadWarsSingleZoneTest is TestBase {
         (uint16 a, uint16 b) = game.scores();
         eq(a, 0);
         eq(b, 0);
-        eq(game.endAt() - game.startAt(), 60);
+        eq(game.endAt() - game.startAt(), 180);
     }
 
     function test_BuildCostsHpNonceAndCooldown() public {

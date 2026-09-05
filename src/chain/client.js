@@ -322,7 +322,7 @@ async function standardSnapshot(context, address) {
   return {
     address,
     mode: "standard",
-    duration: context.durations?.get(address.toLowerCase()) || 60,
+    duration: context.durations?.get(address.toLowerCase()) || 180,
     finalizedBlock,
     zoneCount: 4,
     playerCount: 8,
@@ -444,7 +444,7 @@ async function practiceSnapshot(context, address) {
     receivedAt: Date.now(),
   };
   result.mode = "practice";
-  result.duration = context.durations?.get(address.toLowerCase()) || 60;
+  result.duration = context.durations?.get(address.toLowerCase()) || 180;
   result.finalizedBlock =
     result.phase === 4 && context.chain.id === 10143
       ? await client

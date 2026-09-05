@@ -75,7 +75,7 @@ abstract contract NadWarsZoneCore {
     error InvalidSignature();
     error InvalidMatchId();
 
-    uint64 public constant DURATION = 60;
+    uint64 public constant DURATION = 180;
     uint64 public constant COUNTDOWN = 5;
     uint64 public constant WAITING_TTL = 600;
     uint16 public constant INITIAL_ENERGY = 100;

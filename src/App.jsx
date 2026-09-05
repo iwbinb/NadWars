@@ -143,7 +143,7 @@ export function App() {
     [overview, setOverview] = useState(true),
     [directWallet, setDirectWallet] = useState(false);
   const [tick, setTick] = useState(Date.now()),
-    [replaySecond, setReplaySecond] = useState(60),
+    [replaySecond, setReplaySecond] = useState(180),
     [playing, setPlaying] = useState(false);
   const {
     state: rawState,
@@ -169,7 +169,7 @@ export function App() {
   const duration =
     state?.endAt > state?.startAt
       ? state.endAt - state.startAt
-      : state?.duration || 60;
+      : state?.duration || 180;
   useEffect(() => {
     if (state?.address) {
       setReplaySecond(duration);
@@ -196,7 +196,7 @@ export function App() {
     ? phase === 1
       ? state.startAt - now
       : state.endAt - now
-    : 60;
+    : 180;
   const cooldown = player ? Math.max(0, player.nextActionAt - now) : 0;
   const energy = player
     ? Math.min(
@@ -520,7 +520,7 @@ export function App() {
     setPage("hall");
     setTx(null);
     setProof(false);
-    setReplaySecond(60);
+    setReplaySecond(180);
   }
   async function run(label, fn) {
     if (busy) return;
@@ -832,7 +832,7 @@ export function App() {
                   : "1 个战区 · 49 格"}
               </span>
               <span>
-                <TimerIcon />1 分钟一局
+                <TimerIcon />3 分钟一局
               </span>
             </div>
           </section>

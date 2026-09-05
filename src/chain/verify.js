@@ -4,10 +4,13 @@ import standard from "./standard.json" with { type: "json" };
 import oldPractice from "./legacy/practice-240.json" with { type: "json" };
 import oldStandard from "./legacy/standard-240.json" with { type: "json" };
 
+import minutePractice from "./legacy/practice-60.json" with { type: "json" };
+import minuteStandard from "./legacy/standard-60.json" with { type: "json" };
+
 export const artifacts = { practice: artifact, standard };
 const revisions = {
-  practice: [artifact, oldPractice],
-  standard: [standard, oldStandard],
+  practice: [artifact, minutePractice, oldPractice],
+  standard: [standard, minuteStandard, oldStandard],
 };
 
 export function normalizedRuntime(code, reference = artifact) {
@@ -35,7 +38,8 @@ export function detectMode(code) {
   );
 }
 export function detectDuration(code, mode) {
-  return matchesRuntime(code, artifacts[mode]) ? 60 : 240;
+  const index = revisions[mode]?.findIndex((reference) => matchesRuntime(code, reference));
+  return index >= 0 ? [180, 60, 240][index] : null;
 }
 // Runtime alone cannot prove constructor-initialized state. Accept the exact direct deployment.
 export function matchesCreation(transaction, mode) {

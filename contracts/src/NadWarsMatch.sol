@@ -101,7 +101,7 @@ contract NadWarsMatch {
 
     uint8 public constant ZONE_COUNT = 4;
     uint8 public constant PLAYER_COUNT = 8;
-    uint64 public constant DURATION = 60;
+    uint64 public constant DURATION = 180;
     uint64 public constant COUNTDOWN = 5;
     uint64 public constant WAITING_TTL = 600;
     uint16 public constant INITIAL_ENERGY = 100;
