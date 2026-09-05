@@ -38,6 +38,6 @@ export function explainError(error) {
   if (/Required data unavailable/i.test(raw))
     return "节点暂时无法读取执行数据，请同步后重试；尚未确认成功。";
   if (/RPC Request failed|HTTP request failed|fetch failed/i.test(raw))
-    return "链上连接暂时失败，请重新同步；若钱包弹窗也报错，请检查钱包中的 Monad 测试网 RPC。";
+    return "链上数据读取暂时失败，正在自动重试。若交易已确认，请勿重复提交。";
   return raw.length > 180 ? `${raw.slice(0, 180)}…` : raw;
 }

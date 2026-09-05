@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { snapshot, loadEvents, verifyGame } from "../chain/client.js";
+import { coalescedRefresh, retryRead } from "../chain/sync.js";
 import { explainError } from "../chain/errors.js";
 
 export function useMatch(context, address, fromBlock) {
@@ -31,10 +32,10 @@ export function useMatch(context, address, fromBlock) {
       if (!live) return;
       try {
         if (!verified) {
-          await verifyGame(context, address);
+          await retryRead(() => verifyGame(context, address));
           verified = true;
         }
-        const next = await snapshot(context, address);
+        const next = await retryRead(() => snapshot(context, address));
         if (!live) return;
         if (anchor) {
           const changed =
@@ -44,9 +45,11 @@ export function useMatch(context, address, fromBlock) {
               : next.blockNumber === anchor.number + 1n
                 ? next.parentHash !== anchor.hash
                 : (
-                    await context.publicClient.getBlock({
-                      blockNumber: anchor.number,
-                    })
+                    await retryRead(() =>
+                      context.publicClient.getBlock({
+                        blockNumber: anchor.number,
+                      }),
+                    )
                   ).hash !== anchor.hash);
           if (!live) return;
           if (changed) {
@@ -88,8 +91,7 @@ export function useMatch(context, address, fromBlock) {
         }
       }
     };
-    const refresh = async () => {
-      if (inflight) await inflight;
+    const refresh = coalescedRefresh(async () => {
       if (!live) return;
       inflight = pull();
       try {
@@ -97,7 +99,7 @@ export function useMatch(context, address, fromBlock) {
       } finally {
         inflight = null;
       }
-    };
+    });
     refreshRef.current = refresh;
     void refresh();
     const timer = setInterval(() => {

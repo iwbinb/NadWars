@@ -18,6 +18,7 @@ import {
   detectDuration,
   matchesCreation,
 } from "./verify.js";
+import { retryRead } from "./sync.js";
 import { unpack, ZERO } from "../game/rules.js";
 
 export const abi = artifact.abi;
@@ -358,14 +359,28 @@ async function standardSnapshot(context, address) {
 async function practiceSnapshot(context, address) {
   const client = context.publicClient;
   const block = await client.getBlock({ blockTag: "latest" });
-  const read = (functionName, args = []) =>
-    client.readContract({
+  const readMany = (calls) => {
+    const contracts = calls.map(([functionName, args = []]) => ({
       address,
       abi,
       functionName,
       args,
-      blockNumber: block.number,
-    });
+    }));
+    // The deployed Multicall3 bundles view calls into one eth_call at a fixed block.
+    if (context.chain.id === 10143)
+      return client.multicall({
+        multicallAddress: "0xcA11bde05977b3631167028862bE2a173976CA11",
+        contracts,
+        allowFailure: false,
+        batchSize: 0,
+        blockNumber: block.number,
+      });
+    return Promise.all(
+      contracts.map((call) =>
+        client.readContract({ ...call, blockNumber: block.number }),
+      ),
+    );
+  };
   const [
     rawBoard,
     power1,
@@ -380,47 +395,43 @@ async function practiceSnapshot(context, address) {
     matchId,
     rulesHash,
     createdAt,
-  ] = await Promise.all([
-    read("board"),
-    read("power1"),
-    read("power2"),
-    read("scores"),
-    read("phase"),
-    read("startAt"),
-    read("endAt"),
-    read("rosterVersion"),
-    read("seats", [0n]),
-    read("seats", [1n]),
-    read("matchId"),
-    read("RULES_HASH"),
-    read("createdAt"),
+  ] = await readMany([
+    ["board"],
+    ["power1"],
+    ["power2"],
+    ["scores"],
+    ["phase"],
+    ["startAt"],
+    ["endAt"],
+    ["rosterVersion"],
+    ["seats", [0n]],
+    ["seats", [1n]],
+    ["matchId"],
+    ["RULES_HASH"],
+    ["createdAt"],
   ]);
   const seats = [seat1, seat2];
-  const players = await Promise.all(
-    seats.map(async (who) => {
-      if (who === ZERO) return null;
-      const [state, energy, session] = await Promise.all([
-        read("playerState", [who]),
-        read("energyOf", [who]),
-        read("sessions", [who]),
-      ]);
-      return {
-        address: who,
-        ...state,
-        energy: Number(energy),
-        storedEnergy: Number(state.energy),
-        nextActionAt: Number(state.nextActionAt),
-        energyAt: Number(state.energyAt),
-        nonce: state.nonce,
-        session: {
-          key: session[0],
-          expiresAt: Number(session[1]),
-          version: Number(session[2]),
-          mask: Number(session[3]),
-        },
-      };
-    }),
-  );
+  const occupied = seats.filter((who) => who !== ZERO);
+  const details = occupied.length
+    ? await readMany(
+        occupied.flatMap((who) => [
+          ["playerState", [who]],
+          ["energyOf", [who]],
+          ["sessions", [who]],
+        ]),
+      )
+    : [];
+  const players = seats.map((who) => {
+    if (who === ZERO) return null;
+    const i = occupied.indexOf(who) * 3;
+    return playerView(
+      who,
+      details[i],
+      details[i + 1],
+      details[i + 2],
+      Number(block.timestamp),
+    );
+  });
   const result = {
     address,
     rawBoard: rawBoard.map(Number),
@@ -728,11 +739,13 @@ export async function loadEvents(context, address, fromBlock, toBlock) {
     throw new Error("回放起始区块无效或范围过大，请使用原始邀请链接。");
   const client = context.publicClient;
   const logs = [];
-  const step = 500n;
+  const step = 100n;
   for (let start = BigInt(fromBlock); start <= toBlock; start += step) {
     const end = start + step - 1n > toBlock ? toBlock : start + step - 1n;
     logs.push(
-      ...(await client.getLogs({ address, fromBlock: start, toBlock: end })),
+      ...(await retryRead(() =>
+        client.getLogs({ address, fromBlock: start, toBlock: end }),
+      )),
     );
   }
   const unique = new Map();

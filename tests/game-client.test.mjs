@@ -361,3 +361,157 @@ test("replay integrates objective-seconds and does not count new construction as
   });
   assert.equal(unpack(0, 24).objective, true);
 });
+
+test("practice snapshot aggregates both players at one fixed block", async () => {
+  const { snapshot } = await import("../src/chain/client.js");
+  const address = "0x" + "aa".repeat(20),
+    who = "0x" + "11".repeat(20),
+    other = "0x" + "22".repeat(20);
+  const empty = "0x" + "00".repeat(20),
+    calls = [];
+  const context = {
+    chain: { id: 10143 },
+    games: new Map([[address, "practice"]]),
+    publicClient: {
+      getBlock: async () => ({
+        number: 123n,
+        hash: "0x123",
+        parentHash: "0x122",
+        timestamp: 1010n,
+      }),
+      readContract: () => {
+        throw new Error("unexpected unaggregated read");
+      },
+      multicall: async (request) => {
+        calls.push(request);
+        assert.equal(request.blockNumber, 123n);
+        assert.equal(request.allowFailure, false);
+        if (calls.length === 1)
+          return [
+            Array(49).fill(0n),
+            0n,
+            0n,
+            [0n, 0n],
+            2,
+            1000n,
+            1180n,
+            1,
+            who,
+            other,
+            "0x01",
+            "0x02",
+            900n,
+          ];
+        return [who, other].flatMap((_, i) => [
+          {
+            energy: 100,
+            nextActionAt: 1000n,
+            energyAt: 1000n,
+            nonce: BigInt(i),
+            team: i + 1,
+          },
+          110,
+          [empty, 0n, 1, 7],
+        ]);
+      },
+    },
+  };
+  const state = await snapshot(context, address);
+  assert.deepEqual(
+    calls.map((c) => c.contracts.length),
+    [13, 6],
+  );
+  assert.equal(state.players[1].nonce, 1n);
+  assert.equal(state.players[0].energy, 110);
+  assert.equal(state.endAt - state.startAt, 180);
+});
+
+test("overlapping transaction and socket refreshes run only one trailing read", async () => {
+  const { coalescedRefresh } = await import("../src/chain/sync.js");
+  let count = 0,
+    active = 0,
+    peak = 0,
+    release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const refresh = coalescedRefresh(async () => {
+    count++;
+    active++;
+    peak = Math.max(peak, active);
+    if (count === 1) await gate;
+    active--;
+  });
+  const first = refresh();
+  const hints = Array.from({ length: 8 }, () => refresh());
+  release();
+  await Promise.all([first, ...hints]);
+  assert.equal(count, 2);
+  assert.equal(peak, 1);
+  await refresh();
+  assert.equal(count, 3);
+});
+
+test("read retries recover throttling and remain bounded without retrying contract failures", async () => {
+  const { retryRead } = await import("../src/chain/sync.js");
+  let count = 0;
+  const delays = [];
+  assert.equal(
+    await retryRead(
+      async () => {
+        if (++count < 3)
+          throw {
+            cause: { code: -32011, message: "requests limited to 15/sec" },
+          };
+        return 42;
+      },
+      async (ms) => delays.push(ms),
+    ),
+    42,
+  );
+  assert.deepEqual(delays, [600, 1200]);
+  count = 0;
+  await assert.rejects(
+    retryRead(
+      async () => {
+        count++;
+        throw new Error("HTTP request failed");
+      },
+      async () => {},
+    ),
+  );
+  assert.equal(count, 3);
+  count = 0;
+  await assert.rejects(
+    retryRead(
+      async () => {
+        count++;
+        throw new Error("execution reverted");
+      },
+      async () => {},
+    ),
+  );
+  assert.equal(count, 1);
+});
+
+test("event reads stay within the public RPC 100-block limit", async () => {
+  const { loadEvents } = await import("../src/chain/client.js");
+  const ranges = [];
+  const context = {
+    publicClient: {
+      getLogs: async (q) => {
+        ranges.push([q.fromBlock, q.toBlock]);
+        return [];
+      },
+    },
+  };
+  assert.deepEqual(
+    await loadEvents(context, "0x" + "11".repeat(20), 0n, 250n),
+    [],
+  );
+  assert.deepEqual(ranges, [
+    [0n, 99n],
+    [100n, 199n],
+    [200n, 250n],
+  ]);
+});
