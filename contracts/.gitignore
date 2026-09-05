@@ -1,0 +1,9 @@
+/out/
+/cache/
+/broadcast/
+/snapshots/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
